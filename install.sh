@@ -1,52 +1,64 @@
 #!/bin/bash
 
+# Ensure the script is run as root
+if [ "$EUID" -ne 0 ]; then
+  echo -e "\033[0;31m❌ ERROR: Please run this script with sudo or as root!\033[0m"
+  echo -e "\033[0;36m👉 Example: sudo ./install.sh\033[0m"
+  exit 1
+fi
+
 clear
 
-# Colors
-RED='\033[0;31m'
-GRN='\033[0;32m'
+# Pro-Gaming Sapphire to Violet Gradients & Deep Crimson Red Accents
+SAPPHIRE='\033[38;2;15;100;240m'
+VIOLET='\033[38;2;130;50;250m'
+DEEP_RED='\033[38;2;200;10;40m'
 CYN='\033[0;36m'
 YEL='\033[1;33m'
+GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
-echo -e "${YEL}"
+echo -e "${VIOLET}"
 cat << "EOF"
- ███████╗ ███████╗ 
-██╔════╝ ██╔════╝ 
-███████╗ ██║  ███╗
-╚════██║ ██║   ██║
-███████║ ╚██████╔╝
-╚══════╝  ╚═════╝ 
+███████╗██████╗ ██╗   ██╗████████╗
+╚══███╔╝██╔══██╗╚██╗ ██╔╝╚══██╔══╝
+  ███╔╝ ██████╔╝ ╚████╔╝    ██║   
+ ███╔╝  ██╔═══╝   ╚██╔╝     ██║   
+███████╗██║        ██║      ██║   
+╚══════╝╚═╝        ╚═╝      ╚═╝   
 EOF
 echo -e "${NC}"
 
-echo -ne "${GRN}🔥 Please Subscribe \n"
+echo -ne "${SAPPHIRE}🔥 Please Subscribe \n"
 for i in {1..3}; do
-  echo -ne "${CYN}Subscribing To SanjitGaming"
+  echo -ne "${VIOLET}Subscribing To ZynoxPlayzYT"
   for dot in {1..3}; do
     echo -n "."
     sleep 0.3
   done
-  echo -ne "\r                     \r"
+  echo -ne "\r                            \r"
 done
-echo -e "${GRN} Thanks for Subscribing! If Not Do It Rn${NC}\n"
+echo -e "${SAPPHIRE} Thanks for Subscribing! If Not Do It Rn${NC}\n"
 sleep 1
 
-echo -e "${YEL}X-> Installing Docker & Docker Compose...${NC}"
-apt update
-# Installing docker.io ensures the actual docker engine runs, not just the compose plugin
-apt install docker.io docker-compose -y
+# 1. System Update and Upgrade Automation
+echo -e "${DEEP_RED}[▼] Updating system packages...${NC}"
+apt-get update -y && apt-get upgrade -y
+
+echo -e "${DEEP_RED}[▼] Installing Docker & Core Dependencies...${NC}"
+apt-get install docker.io docker-compose openssl curl -y
 systemctl enable docker
 systemctl start docker
 
-echo -e "${CYN}X-> Setting up Pterodactyl Panel directories...${NC}"
+# 2. Setup Directories with Root Authority
+echo -e "${SAPPHIRE}[▼] Setting up secure Pterodactyl core environment...${NC}"
 mkdir -p /opt/pterodactyl/panel
 cd /opt/pterodactyl/panel || exit
 
-# Generate a random 32-character string for the APP_KEY (Required to fix the 500 error)
+# Generate Laravel Application Encryption Key
 APP_KEY="base64:$(openssl rand -base64 32)"
 
-echo -e "${CYN}X-> Writing docker-compose.yml...${NC}"
+echo -e "${SAPPHIRE}[▼] Generating system deployment profiles...${NC}"
 cat <<EOF > docker-compose.yml
 version: '3.8'
 
@@ -55,7 +67,7 @@ x-common:
     MYSQL_PASSWORD: &db-password "PteroSecurePass123!"
     MYSQL_ROOT_PASSWORD: "PteroRootSecurePass123!"
   panel: &panel-environment
-    APP_URL: "http://127.0.0.1:8030" # You can change this to your domain later in the .env/docker-compose file
+    APP_URL: "http://127.0.0.1:8030"
     APP_TIMEZONE: "UTC"
     APP_SERVICE_AUTHOR: "admin@example.com"
     TRUSTED_PROXIES: "*"
@@ -118,23 +130,37 @@ networks:
         - subnet: 172.20.0.0/16
 EOF
 
-echo -e "${CYN}X-> Creating data directories and fixing permissions...${NC}"
+echo -e "${SAPPHIRE}[▼] Configuring volume nodes & unlocking file paths...${NC}"
 mkdir -p ./data/{database,var,nginx,certs,logs}
-# This fixes the 500 error related to Laravel not being able to write to the log/cache directories
 chmod -R 777 ./data
 
-echo -e "${GRN}X-> Starting Pterodactyl containers...${NC}"
+echo -e "${DEEP_RED}[▼] Booting up Docker Compose containers...${NC}"
 docker-compose up -d
 
-echo -e "${YEL}X-> Waiting 20 seconds for database to fully boot...${NC}"
-sleep 20
+echo -e "${VIOLET}[▼] Waiting 25 seconds for SQL internal engine to initialize...${NC}"
+sleep 25
 
-echo -e "${CYN}X-> Running Database Migrations (Fixes 500 Error)...${NC}"
+echo -e "${SAPPHIRE}[▼] Instantiating Database Schema & Migrations...${NC}"
 docker-compose exec -T panel php artisan migrate --seed --force
 
-echo -e "${GRN}X-> Creating Admin User...${NC}"
-echo -e "${YEL}*** PLEASE FOLLOW THE PROMPTS ON SCREEN TO SET YOUR LOGIN DETAILS ***${NC}"
+echo -e "${DEEP_RED}[▼] Initializing Master Administrator Creation...${NC}"
+echo -e "${YEL}👉 ENTER YOUR PANEL ACCOUNT DETAILS BELOW:${NC}"
 docker-compose exec panel php artisan p:user:make
 
-echo -e "${YEL}✅ Installation 100% Complete!${NC}"
-echo -e "${CYN}🌐 Access your panel via your web browser at: http://YOUR_SERVER_IP:8030${NC}"
+# Get public IP address automatically
+SERVER_IP=$(curl -s ifconfig.me)
+if [ -z "$SERVER_IP" ]; then
+  SERVER_IP="YOUR_SERVER_IP"
+fi
+
+echo -e "\n-----------------------------------------------------"
+echo -e "${VIOLET}██████╗  ██████╗ ███╗   ██╗███████╗██╗██╗${NC}"
+echo -e "${SAPPHIRE}██╔══██╗██╔═══██╗████╗  ██║██╔════╝██║██║${NC}"
+echo -e "${SAPPHIRE}██║  ██║██║   ██║██╔██╗ ██║█████╗  ██║██║${NC}"
+echo -e "${VIOLET}██║  ██║██║   ██║██║╚██╗██║██╔══╝  ╚═╝╚═╝${NC}"
+echo -e "${DEEP_RED}██████╔╝╚██████╔╝██║ ╚████║███████╗██╗██╗${NC}"
+echo -e "${DEEP_RED}╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚══════╝╚═╝╚═╝${NC}"
+echo -e "-----------------------------------------------------"
+echo -e "${GRN}✅ Core build and installation completely active!${NC}"
+echo -e "${CYN}🌐 Access Web UI: ${YEL}http://${SERVER_IP}:8030${NC}"
+echo -e "-----------------------------------------------------\n"
