@@ -41,14 +41,14 @@ done
 echo -e "${SAPPHIRE} Thanks for Subscribing! If Not Do It Rn${NC}\n"
 sleep 1
 
-# 1. System Update and Upgrade Automation
+# 1. System Update
 echo -e "${DEEP_RED}[▼] Updating system packages...${NC}"
 apt-get update -y && apt-get upgrade -y
 
-echo -e "${DEEP_RED}[▼] Installing Docker & Core Dependencies...${NC}"
+echo -e "${DEEP_RED}[▼] Installing Docker & Dependencies...${NC}"
 apt-get install docker.io docker-compose openssl curl -y
 
-# CodeSandbox/LXC Fix: Detect if systemd is available, otherwise use service
+# CodeSandbox Fix: Detect if systemd is available, otherwise use service
 echo -e "${VIOLET}[▼] Booting Docker Daemon (CodeSandbox Compatible)...${NC}"
 if pidof systemd &> /dev/null; then
     systemctl enable docker
@@ -146,15 +146,14 @@ echo -e "${DEEP_RED}[▼] Booting up Docker Compose containers...${NC}"
 docker-compose up -d
 
 echo -e "${VIOLET}[▼] Waiting 30 seconds for CodeSandbox SQL engine to initialize...${NC}"
-# Increased sleep time specifically for CodeSandbox performance caps
 sleep 30
 
 echo -e "${SAPPHIRE}[▼] Instantiating Database Schema & Migrations...${NC}"
 docker-compose exec -T panel php artisan migrate --seed --force
 
+# 3. Interactive Admin Account Creation (Old System Restored)
 echo -e "${DEEP_RED}[▼] Initializing Master Administrator Creation...${NC}"
 echo -e "${YEL}👉 ENTER YOUR PANEL ACCOUNT DETAILS BELOW:${NC}"
-# The account prompt will now execute normally because the DB is running
 docker-compose exec panel php artisan p:user:make
 
 echo -e "\n-----------------------------------------------------"
