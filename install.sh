@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Ensure the script is run as root
+# Ensure the script is run as root (or with sudo)
 if [ "$EUID" -ne 0 ]; then
   echo -e "\033[0;31m❌ ERROR: Please run this script with sudo or as root!\033[0m"
-  echo -e "\033[0;36m👉 Example: sudo ./install.sh\033[0m"
+  echo -e "\033[0;36m👉 Example: sudo bash install.sh\033[0m"
   exit 1
 fi
 
@@ -47,13 +47,21 @@ apt-get update -y && apt-get upgrade -y
 
 echo -e "${DEEP_RED}[▼] Installing Docker & Core Dependencies...${NC}"
 apt-get install docker.io docker-compose openssl curl -y
-systemctl enable docker
-systemctl start docker
 
-# 2. Setup Directories with Root Authority
-echo -e "${SAPPHIRE}[▼] Setting up secure Pterodactyl core environment...${NC}"
-mkdir -p /opt/pterodactyl/panel
-cd /opt/pterodactyl/panel || exit
+# CodeSandbox/LXC Fix: Detect if systemd is available, otherwise use service
+echo -e "${VIOLET}[▼] Booting Docker Daemon (CodeSandbox Compatible)...${NC}"
+if pidof systemd &> /dev/null; then
+    systemctl enable docker
+    systemctl start docker
+else
+    service docker start
+fi
+
+# 2. Setup Directories (Using Local Workspace to fix CodeSandbox /opt permission denied)
+INSTALL_DIR="$PWD/pterodactyl_panel"
+echo -e "${SAPPHIRE}[▼] Setting up secure Pterodactyl core in ${INSTALL_DIR}...${NC}"
+mkdir -p "$INSTALL_DIR"
+cd "$INSTALL_DIR" || exit
 
 # Generate Laravel Application Encryption Key
 APP_KEY="base64:$(openssl rand -base64 32)"
@@ -137,21 +145,17 @@ chmod -R 777 ./data
 echo -e "${DEEP_RED}[▼] Booting up Docker Compose containers...${NC}"
 docker-compose up -d
 
-echo -e "${VIOLET}[▼] Waiting 25 seconds for SQL internal engine to initialize...${NC}"
-sleep 25
+echo -e "${VIOLET}[▼] Waiting 30 seconds for CodeSandbox SQL engine to initialize...${NC}"
+# Increased sleep time specifically for CodeSandbox performance caps
+sleep 30
 
 echo -e "${SAPPHIRE}[▼] Instantiating Database Schema & Migrations...${NC}"
 docker-compose exec -T panel php artisan migrate --seed --force
 
 echo -e "${DEEP_RED}[▼] Initializing Master Administrator Creation...${NC}"
 echo -e "${YEL}👉 ENTER YOUR PANEL ACCOUNT DETAILS BELOW:${NC}"
+# The account prompt will now execute normally because the DB is running
 docker-compose exec panel php artisan p:user:make
-
-# Get public IP address automatically
-SERVER_IP=$(curl -s ifconfig.me)
-if [ -z "$SERVER_IP" ]; then
-  SERVER_IP="YOUR_SERVER_IP"
-fi
 
 echo -e "\n-----------------------------------------------------"
 echo -e "${VIOLET}██████╗  ██████╗ ███╗   ██╗███████╗██╗██╗${NC}"
@@ -162,5 +166,6 @@ echo -e "${DEEP_RED}██████╔╝╚██████╔╝██║
 echo -e "${DEEP_RED}╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚══════╝╚═╝╚═╝${NC}"
 echo -e "-----------------------------------------------------"
 echo -e "${GRN}✅ Core build and installation completely active!${NC}"
-echo -e "${CYN}🌐 Access Web UI: ${YEL}http://${SERVER_IP}:8030${NC}"
+echo -e "${CYN}🌐 Since you are in CodeSandbox, check your 'Ports' tab in the editor.${NC}"
+echo -e "${CYN}👉 Click the 'Open in Browser' icon next to Port 8030 to view your panel.${NC}"
 echo -e "-----------------------------------------------------\n"
