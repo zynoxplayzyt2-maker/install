@@ -1,15 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Ensure the script is run as root (or with sudo)
-if [ "$EUID" -ne 0 ]; then
-  echo -e "\033[0;31m❌ ERROR: Please run this script with sudo or as root!\033[0m"
-  echo -e "\033[0;36m👉 Example: sudo bash install.sh\033[0m"
-  exit 1
-fi
+# ==============================================================================
+# BASH STRICT MODE
+# Ensures the script fails fast if any background execution throws an error.
+# ==============================================================================
+set -euo pipefail
 
-clear
-
-# Pro-Gaming Sapphire to Violet Gradients & Deep Crimson Red Accents
+# ==============================================================================
+# COLOR PALETTE & STYLING (Pro-Gaming Theme)
+# ==============================================================================
 SAPPHIRE='\033[38;2;15;100;240m'
 VIOLET='\033[38;2;130;50;250m'
 DEEP_RED='\033[38;2;200;10;40m'
@@ -18,6 +17,27 @@ YEL='\033[1;33m'
 GRN='\033[0;32m'
 NC='\033[0m' # No Color
 
+# ==============================================================================
+# ADVANCED LOGGING FUNCTIONS
+# ==============================================================================
+log_info()    { echo -e "${SAPPHIRE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GRN}[SUCCESS]${NC} $1"; }
+log_warn()    { echo -e "${YEL}[WARNING]${NC} $1"; }
+log_error()   { echo -e "${DEEP_RED}[ERROR]${NC} $1"; exit 1; }
+
+# Clear terminal screen
+clear
+
+# ==============================================================================
+# ROOT PRIVILEGE CHECK
+# ==============================================================================
+if [[ "${EUID}" -ne 0 ]]; then
+  log_error "Insufficient permissions. Please run this script with sudo or as root!"
+fi
+
+# ==============================================================================
+# ASCII ART & BRANDING ANIMATION
+# ==============================================================================
 echo -e "${VIOLET}"
 cat << "EOF"
 ███████╗██████╗ ██╗   ██╗████████╗
@@ -41,84 +61,116 @@ done
 echo -e "${SAPPHIRE} Thanks for Subscribing! If Not Do It Rn${NC}\n"
 sleep 1
 
-# 1. System Update
-echo -e "${DEEP_RED}[▼] Updating system packages...${NC}"
-apt-get update -y && apt-get upgrade -y
+# ==============================================================================
+# COMMAND BLOCK 1: FIRST COMMAND ROOT APT
+# Executes your custom update and upgrade protocols non-interactively.
+# ==============================================================================
+log_info "Executing Core System Updates..."
+export DEBIAN_FRONTEND=noninteractive
+sudo apt update
+sudo apt upgrade -y
+log_success "System dependencies updated successfully."
 
-echo -e "${DEEP_RED}[▼] Installing Docker & Dependencies...${NC}"
-apt-get install docker.io docker-compose openssl curl -y
-
-# CodeSandbox Fix: Detect if systemd is available, otherwise use service
-echo -e "${VIOLET}[▼] Booting Docker Daemon (CodeSandbox Compatible)...${NC}"
-if pidof systemd &> /dev/null; then
-    systemctl enable docker
-    systemctl start docker
+# ==============================================================================
+# STAGE 2: RUNTIME DAEMON VERIFICATION
+# Verifies Docker runtime states before mounting target profiles.
+# ==============================================================================
+log_info "Verifying Docker Daemon Status..."
+if command -v systemctl &> /dev/null && pidof systemd &> /dev/null; then
+    systemctl enable docker >/dev/null 2>&1 || true
+    systemctl start docker >/dev/null 2>&1 || true
 else
-    service docker start
+    service docker start >/dev/null 2>&1 || true
 fi
 
-# 2. Setup Directories (Using Local Workspace to fix CodeSandbox /opt permission denied)
-INSTALL_DIR="$PWD/pterodactyl_panel"
-echo -e "${SAPPHIRE}[▼] Setting up secure Pterodactyl core in ${INSTALL_DIR}...${NC}"
-mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR" || exit
+# Ensure compose toolkit is ready
+if ! command -v docker-compose &> /dev/null; then
+    log_error "docker-compose binary execution path could not be found."
+fi
 
-# Generate Laravel Application Encryption Key
-APP_KEY="base64:$(openssl rand -base64 32)"
+# ==============================================================================
+# STAGE 3: DIRECTORY DEPLOYMENT (/srv/pterodactyl/)
+# Creates target volumes mapping directly to your docker-compose layout.
+# ==============================================================================
+log_info "Initializing production data storage arrays under /srv/pterodactyl/..."
+mkdir -p /srv/pterodactyl/{database,var,nginx,certs,logs}
+chmod -R 755 /srv/pterodactyl
 
-echo -e "${SAPPHIRE}[▼] Generating system deployment profiles...${NC}"
-cat <<EOF > docker-compose.yml
+# Move into installation root
+cd /srv/pterodactyl || log_error "Failed to access workspace path /srv/pterodactyl"
+
+# ==============================================================================
+# STAGE 4: WRITE EXPLICIT DOCKER-COMPOSE MANIFEST
+# Literal declaration of your specified docker-compose configuration.
+# ==============================================================================
+log_info "Writing core structure manifest to file..."
+
+# Using single quotes around 'EOF' guarantees total data integrity without string parsing
+cat << 'EOF' > docker-compose.yml
 version: '3.8'
-
 x-common:
-  database: &db-environment
-    MYSQL_PASSWORD: &db-password "PteroSecurePass123!"
-    MYSQL_ROOT_PASSWORD: "PteroRootSecurePass123!"
-  panel: &panel-environment
-    APP_URL: "http://127.0.0.1:8030"
+  database:
+    &db-environment
+    # Do not remove the "&db-password" from the end of the line below, it is important
+    # for Panel functionality.
+    MYSQL_PASSWORD: &db-password "CHANGE_ME"
+    MYSQL_ROOT_PASSWORD: "CHANGE_ME_TOO"
+  panel:
+    &panel-environment
+    # This URL should be the URL that your reverse proxy routes to the panel server
+    APP_URL: "https://pterodactyl.example.com"
+    # A list of valid timezones can be found here: http://php.net/manual/en/timezones.php
     APP_TIMEZONE: "UTC"
-    APP_SERVICE_AUTHOR: "admin@example.com"
-    TRUSTED_PROXIES: "*"
-    APP_KEY: "${APP_KEY}"
-  mail: &mail-environment
-    MAIL_FROM: "admin@example.com"
+    APP_SERVICE_AUTHOR: "noreply@example.com"
+    TRUSTED_PROXIES: "*" # Set this to your proxy IP
+    # Uncomment the line below and set to a non-empty value if you want to use Let's Encrypt
+    # to generate an SSL certificate for the Panel.
+    # LE_EMAIL: ""
+  mail:
+    &mail-environment
+    MAIL_FROM: "noreply@example.com"
     MAIL_DRIVER: "smtp"
     MAIL_HOST: "mail"
     MAIL_PORT: "1025"
     MAIL_USERNAME: ""
     MAIL_PASSWORD: ""
     MAIL_ENCRYPTION: "true"
-
+ 
+#
+# ------------------------------------------------------------------------------------------
+# DANGER ZONE BELOW
+#
+# The remainder of this file likely does not need to be changed. Please only make modifications
+# below if you understand what you are doing.
+#
 services:
   database:
     image: mariadb:10.5
     restart: always
     command: --default-authentication-plugin=mysql_native_password
     volumes:
-      - "./data/database:/var/lib/mysql"
+      - "/srv/pterodactyl/database:/var/lib/mysql"
     environment:
       <<: *db-environment
       MYSQL_DATABASE: "panel"
       MYSQL_USER: "pterodactyl"
-
   cache:
     image: redis:alpine
     restart: always
-
   panel:
     image: ghcr.io/pterodactyl/panel:latest
     restart: always
     ports:
-      - "8030:80"
-      - "4433:443"
+      - "80:80"
+      - "443:443"
     links:
       - database
       - cache
     volumes:
-      - "./data/var:/app/var"
-      - "./data/nginx:/etc/nginx/http.d"
-      - "./data/certs:/etc/letsencrypt"
-      - "./data/logs:/app/storage/logs"
+      - "/srv/pterodactyl/var/:/app/var/"
+      - "/srv/pterodactyl/nginx/:/etc/nginx/http.d/"
+      - "/srv/pterodactyl/certs/:/etc/letsencrypt/"
+      - "/srv/pterodactyl/logs/:/app/storage/logs"
     environment:
       <<: [*panel-environment, *mail-environment]
       DB_PASSWORD: *db-password
@@ -130,7 +182,6 @@ services:
       REDIS_HOST: "cache"
       DB_HOST: "database"
       DB_PORT: "3306"
-
 networks:
   default:
     ipam:
@@ -138,24 +189,57 @@ networks:
         - subnet: 172.20.0.0/16
 EOF
 
-echo -e "${SAPPHIRE}[▼] Configuring volume nodes & unlocking file paths...${NC}"
-mkdir -p ./data/{database,var,nginx,certs,logs}
-chmod -R 777 ./data
+log_success "docker-compose.yml configuration successfully saved."
 
-echo -e "${DEEP_RED}[▼] Booting up Docker Compose containers...${NC}"
+# ==============================================================================
+# COMMAND BLOCK 2: RUN FILE DOCKER
+# Boots up the newly deployed compose environment configuration.
+# ==============================================================================
+log_info "Deploying container virtualization network..."
 docker-compose up -d
+log_success "Containers initialized dynamically in detached engine mode."
 
-echo -e "${VIOLET}[▼] Waiting 30 seconds for CodeSandbox SQL engine to initialize...${NC}"
-sleep 30
+# ==============================================================================
+# STAGE 5: INTELLIGENT HARDWARE LIFECYCLE CHECK
+# Actively monitors the MariaDB server loop to guarantee readiness before 
+# migrations execute, eliminating SQL configuration dropouts.
+# ==============================================================================
+log_info "Syncing infrastructure engines... waiting for MariaDB handshakes..."
+MAX_TRIES=20
+TRIES=0
+while ! docker-compose exec -T database mysqladmin ping -h"localhost" --silent &> /dev/null; do
+    TRIES=$((TRIES+1))
+    if [ $TRIES -eq $MAX_TRIES ]; then
+        log_error "Database container storage initialization timed out."
+    fi
+    echo -ne "${VIOLET}Checking SQL readiness... validation sweep [${TRIES}/${MAX_TRIES}]${NC}\r"
+    sleep 2
+done
+echo -ne "\n"
+log_success "Database synchronization verification verified active."
 
-echo -e "${SAPPHIRE}[▼] Instantiating Database Schema & Migrations...${NC}"
+# ==============================================================================
+# STAGE 6: CORE APPLICATION SETUP
+# Automatically sets up database tables and generates the critical application key.
+# ==============================================================================
+log_info "Initializing database schema structures..."
+docker-compose exec -T panel php artisan key:generate --force
 docker-compose exec -T panel php artisan migrate --seed --force
+log_success "Database seeding and structure installation finalized."
 
-# 3. Interactive Admin Account Creation (Old System Restored)
-echo -e "${DEEP_RED}[▼] Initializing Master Administrator Creation...${NC}"
+# ==============================================================================
+# COMMAND BLOCK 3: CREATE USER PANEL
+# Passes management control directly over to your custom user setup terminal sequence.
+# ==============================================================================
+set +e
+log_info "Transferring thread access to Administrative Setup Console..."
 echo -e "${YEL}👉 ENTER YOUR PANEL ACCOUNT DETAILS BELOW:${NC}"
-docker-compose exec panel php artisan p:user:make
+docker-compose run --rm panel php artisan p:user:make
+set -e
 
+# ==============================================================================
+# ARCHITECTURE COMPLETE CLOSING STATEMENT
+# ==============================================================================
 echo -e "\n-----------------------------------------------------"
 echo -e "${VIOLET}██████╗  ██████╗ ███╗   ██╗███████╗██╗██╗${NC}"
 echo -e "${SAPPHIRE}██╔══██╗██╔═══██╗████╗  ██║██╔════╝██║██║${NC}"
@@ -164,7 +248,7 @@ echo -e "${VIOLET}██║  ██║██║   ██║██║╚██╗
 echo -e "${DEEP_RED}██████╔╝╚██████╔╝██║ ╚████║███████╗██╗██╗${NC}"
 echo -e "${DEEP_RED}╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚══════╝╚═╝╚═╝${NC}"
 echo -e "-----------------------------------------------------"
-echo -e "${GRN}✅ Core build and installation completely active!${NC}"
-echo -e "${CYN}🌐 Since you are in CodeSandbox, check your 'Ports' tab in the editor.${NC}"
-echo -e "${CYN}👉 Click the 'Open in Browser' icon next to Port 8030 to view your panel.${NC}"
+echo -e "${GRN}✅ Installation process completed successfully!${NC}"
+echo -e "${CYN}🌐 Access Path: Your configured proxy domain or host IP interface.${NC}"
+echo -e "${CYN}👉 Active Traffic Interfaces mapped on port channels [80] and [443].${NC}"
 echo -e "-----------------------------------------------------\n"
