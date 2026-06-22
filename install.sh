@@ -63,7 +63,6 @@ sleep 1
 
 # ==============================================================================
 # COMMAND BLOCK 1: FIRST COMMAND ROOT APT
-# Executes your custom update and upgrade protocols non-interactively.
 # ==============================================================================
 log_info "Executing Core System Updates..."
 export DEBIAN_FRONTEND=noninteractive
@@ -72,14 +71,37 @@ sudo apt upgrade -y
 log_success "System dependencies updated successfully."
 
 # ==============================================================================
-# STAGE 2: RUNTIME DAEMON VERIFICATION
-# Verifies Docker runtime states before mounting target profiles.
+# STAGE 2: RUNTIME DAEMON VERIFICATION & TTRPC/SHIM PATCH
+# Cleans up locked socket communication files and reconfigures Docker to use
+# cgroupfs, eliminating the CodeSandbox "unsupported protocol" shim crash.
 # ==============================================================================
-log_info "Verifying Docker Daemon Status..."
+log_info "Cleaning up stale runtime protocols & fixing TTRPC sockets..."
+
+# Force terminate any misbehaving/locked docker and containerd daemons
+systemctl stop docker containerd >/dev/null 2>&1 || true
+service docker stop >/dev/null 2>&1 || true
+service containerd stop >/dev/null 2>&1 || true
+
+# Purge corrupted sockets that trigger "unsupported protocol" failures
+rm -f /var/run/docker.sock
+rm -rf /var/run/containerd/*
+
+# Reconfigure daemon engine to use cgroupfs (essential for sandbox environments)
+mkdir -p /etc/docker
+cat <<EOF > /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=cgroupfs"]
+}
+EOF
+log_success "Docker configuration customized for sandbox constraints."
+
+log_info "Booting repaired Containerd & Docker services..."
 if command -v systemctl &> /dev/null && pidof systemd &> /dev/null; then
-    systemctl enable docker >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl start containerd >/dev/null 2>&1 || true
     systemctl start docker >/dev/null 2>&1 || true
 else
+    service containerd start >/dev/null 2>&1 || true
     service docker start >/dev/null 2>&1 || true
 fi
 
@@ -90,24 +112,21 @@ fi
 
 # ==============================================================================
 # STAGE 3: DIRECTORY DEPLOYMENT (/srv/pterodactyl/)
-# Creates target volumes mapping directly to your docker-compose layout.
 # ==============================================================================
 log_info "Initializing production data storage arrays under /srv/pterodactyl/..."
 mkdir -p /srv/pterodactyl/{database,var,nginx,certs,logs}
-chmod -R 755 /srv/pterodactyl
+chmod -R 777 /srv/pterodactyl
 
 # Move into installation root
 cd /srv/pterodactyl || log_error "Failed to access workspace path /srv/pterodactyl"
 
 # ==============================================================================
 # STAGE 4: WRITE EXPLICIT DOCKER-COMPOSE MANIFEST
-# Literal declaration of your specified docker-compose configuration.
 # ==============================================================================
 log_info "Writing core structure manifest to file..."
 
-# Using single quotes around 'EOF' guarantees total data integrity without string parsing
+# 'version' tag has been removed to eliminate the obsolete configuration warning
 cat << 'EOF' > docker-compose.yml
-version: '3.8'
 x-common:
   database:
     &db-environment
@@ -193,7 +212,6 @@ log_success "docker-compose.yml configuration successfully saved."
 
 # ==============================================================================
 # COMMAND BLOCK 2: RUN FILE DOCKER
-# Boots up the newly deployed compose environment configuration.
 # ==============================================================================
 log_info "Deploying container virtualization network..."
 docker-compose up -d
@@ -201,16 +219,14 @@ log_success "Containers initialized dynamically in detached engine mode."
 
 # ==============================================================================
 # STAGE 5: INTELLIGENT HARDWARE LIFECYCLE CHECK
-# Actively monitors the MariaDB server loop to guarantee readiness before 
-# migrations execute, eliminating SQL configuration dropouts.
 # ==============================================================================
 log_info "Syncing infrastructure engines... waiting for MariaDB handshakes..."
-MAX_TRIES=20
+MAX_TRIES=25
 TRIES=0
 while ! docker-compose exec -T database mysqladmin ping -h"localhost" --silent &> /dev/null; do
     TRIES=$((TRIES+1))
     if [ $TRIES -eq $MAX_TRIES ]; then
-        log_error "Database container storage initialization timed out."
+        log_error "Database container storage initialization timed out. Sandbox environment has low resources."
     fi
     echo -ne "${VIOLET}Checking SQL readiness... validation sweep [${TRIES}/${MAX_TRIES}]${NC}\r"
     sleep 2
@@ -220,7 +236,6 @@ log_success "Database synchronization verification verified active."
 
 # ==============================================================================
 # STAGE 6: CORE APPLICATION SETUP
-# Automatically sets up database tables and generates the critical application key.
 # ==============================================================================
 log_info "Initializing database schema structures..."
 docker-compose exec -T panel php artisan key:generate --force
@@ -229,7 +244,6 @@ log_success "Database seeding and structure installation finalized."
 
 # ==============================================================================
 # COMMAND BLOCK 3: CREATE USER PANEL
-# Passes management control directly over to your custom user setup terminal sequence.
 # ==============================================================================
 set +e
 log_info "Transferring thread access to Administrative Setup Console..."
