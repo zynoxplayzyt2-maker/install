@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# BASH STRICT MODE
-# Ensures the script fails fast if any background execution throws an error.
+# BASH STRICT MODE (PATCHED)
+# Removed the '-u' flag to prevent RVM (Ruby Version Manager) from crashing 
+# the script in Codespaces/CodeSandbox environments due to unbound variables.
 # ==============================================================================
-set -euo pipefail
+set -eo pipefail
 
 # ==============================================================================
-# COLOR PALETTE & STYLING (Pro-Gaming Theme)
+# COLOR PALETTE & STYLING
 # ==============================================================================
 SAPPHIRE='\033[38;2;15;100;240m'
 VIOLET='\033[38;2;130;50;250m'
@@ -38,27 +39,27 @@ fi
 # ==============================================================================
 # ASCII ART & BRANDING ANIMATION
 # ==============================================================================
-echo -e "${VIOLET}"
+echo -e "${DEEP_RED}"
 cat << "EOF"
-███████╗██████╗ ██╗   ██╗████████╗
-╚══███╔╝██╔══██╗╚██╗ ██╔╝╚══██╔══╝
-  ███╔╝ ██████╔╝ ╚████╔╝    ██║   
- ███╔╝  ██╔═══╝   ╚██╔╝     ██║   
-███████╗██║        ██║      ██║   
-╚══════╝╚═╝        ╚═╝      ╚═╝   
+██████╗ ██╗      ██████╗  ██████╗ ██████╗ ██████╗ ██████╗ ███████╗███╗   ███╗██████╗ 
+██╔══██╗██║     ██╔═══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔════╝████╗ ████║██╔══██╗
+██████╔╝██║     ██║   ██║██║   ██║██║  ██║██████╔╝██║  ██║███████╗██╔████╔██║██████╔╝
+██╔══██╗██║     ██║   ██║██║   ██║██║  ██║██╔══██╗██║  ██║╚════██║██║╚██╔╝██║██╔═══╝ 
+██████╔╝███████╗╚██████╔╝╚██████╔╝██████╔╝██████╔╝██████╔╝███████║██║ ╚═╝ ██║██║     
+╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝     
 EOF
 echo -e "${NC}"
 
-echo -ne "${SAPPHIRE}🔥 Please Subscribe \n"
+echo -ne "${SAPPHIRE}🔥 Initializing Core Systems \n"
 for i in {1..3}; do
-  echo -ne "${VIOLET}Subscribing To ZynoxPlayzYT"
+  echo -ne "${VIOLET}Booting BloodBDSMP Infrastructure"
   for dot in {1..3}; do
     echo -n "."
     sleep 0.3
   done
-  echo -ne "\r                            \r"
+  echo -ne "\r                                      \r"
 done
-echo -e "${SAPPHIRE} Thanks for Subscribing! If Not Do It Rn${NC}\n"
+echo -e "${SAPPHIRE} Systems Online! Proceeding with installation.${NC}\n"
 sleep 1
 
 # ==============================================================================
@@ -72,28 +73,23 @@ log_success "System dependencies updated successfully."
 
 # ==============================================================================
 # STAGE 2: RUNTIME DAEMON VERIFICATION & TTRPC/SHIM PATCH
-# Cleans up locked socket communication files and reconfigures Docker to use
-# cgroupfs, eliminating the CodeSandbox "unsupported protocol" shim crash.
 # ==============================================================================
 log_info "Cleaning up stale runtime protocols & fixing TTRPC sockets..."
 
-# Force terminate any misbehaving/locked docker and containerd daemons
 systemctl stop docker containerd >/dev/null 2>&1 || true
 service docker stop >/dev/null 2>&1 || true
 service containerd stop >/dev/null 2>&1 || true
 
-# Purge corrupted sockets that trigger "unsupported protocol" failures
 rm -f /var/run/docker.sock
 rm -rf /var/run/containerd/*
 
-# Reconfigure daemon engine to use cgroupfs (essential for sandbox environments)
 mkdir -p /etc/docker
 cat <<EOF > /etc/docker/daemon.json
 {
   "exec-opts": ["native.cgroupdriver=cgroupfs"]
 }
 EOF
-log_success "Docker configuration customized for sandbox constraints."
+log_success "Docker configuration customized."
 
 log_info "Booting repaired Containerd & Docker services..."
 if command -v systemctl &> /dev/null && pidof systemd &> /dev/null; then
@@ -105,7 +101,6 @@ else
     service docker start >/dev/null 2>&1 || true
 fi
 
-# Ensure compose toolkit is ready
 if ! command -v docker-compose &> /dev/null; then
     log_error "docker-compose binary execution path could not be found."
 fi
@@ -116,8 +111,6 @@ fi
 log_info "Initializing production data storage arrays under /srv/pterodactyl/..."
 mkdir -p /srv/pterodactyl/{database,var,nginx,certs,logs}
 chmod -R 777 /srv/pterodactyl
-
-# Move into installation root
 cd /srv/pterodactyl || log_error "Failed to access workspace path /srv/pterodactyl"
 
 # ==============================================================================
@@ -125,7 +118,6 @@ cd /srv/pterodactyl || log_error "Failed to access workspace path /srv/pterodact
 # ==============================================================================
 log_info "Writing core structure manifest to file..."
 
-# 'version' tag has been removed to eliminate the obsolete configuration warning
 cat << 'EOF' > docker-compose.yml
 x-common:
   database:
